@@ -9,6 +9,7 @@ import os
 import json
 from PIL import Image
 import torch.nn as nn
+import cv2 
 
 
 def main(args):
@@ -53,20 +54,24 @@ def main(args):
     elif args.dift_model == 'adm':
         dift = ADMFeaturizer4Eval()
 
-    print("saving all test images' features...")
-    os.makedirs(args.save_path, exist_ok=True)
-    for cat in tqdm(all_cats):
-        output_dict = {}
-        image_list = cat2img[cat]
-        for image_path in image_list:
-            img = Image.open(os.path.join(dataset_path, 'JPEGImages', cat, image_path))
-            output_dict[image_path] = dift.forward(img,
-                                                category=cat,
-                                                img_size=args.img_size,
-                                                t=args.t,
-                                                up_ft_index=args.up_ft_index,
-                                                ensemble_size=args.ensemble_size)
-        torch.save(output_dict, os.path.join(args.save_path, f'{cat}.pth'))
+    ## FIRST EXTRACT FEATURES FROM THE DIFFUSION MODEL
+    # print("saving all test images' features...")
+    # os.makedirs(args.save_path, exist_ok=True)
+    # for cat in tqdm(all_cats):  # 각 category 별로 prompt를 주기 위해 category for문을 만들었네
+    #     output_dict = {}
+    #     image_list = cat2img[cat]
+    #     for image_path in image_list:
+    #         img = Image.open(os.path.join(dataset_path, 'JPEGImages', cat, image_path))
+    #         output_dict[image_path] = dift.forward(img,
+    #                                             category=cat,
+    #                                             img_size=args.img_size,
+    #                                             t=args.t,
+    #                                             up_ft_index=args.up_ft_index,
+    #                                             ensemble_size=args.ensemble_size)
+        
+    #     print(f'Category: {cat}, number of imgs in {cat}: {len(output_dict)}')
+    #     torch.save(output_dict, os.path.join(args.save_path, f'{cat}.pth'))
+
 
     total_pck = []
     all_correct = 0
@@ -85,12 +90,57 @@ def main(args):
             with open(os.path.join(dataset_path, test_path, json_path)) as temp_f:
                 data = json.load(temp_f)
 
+            SAVE_PATH = './vis/vis_matches/'
+            if not os.path.exists(SAVE_PATH):
+                    os.makedirs(SAVE_PATH)
+                    
+            VISUALIZE=True
+            ## PHO_VISUALIZE BBOX and KEYPOINTS IN TARGET AND SOURCE
+            if VISUALIZE:
+                # Load source and target images
+                src_img = cv2.imread(os.path.join(dataset_path, 'JPEGImages', cat, data['src_imname']))
+                trg_img = cv2.imread(os.path.join(dataset_path, 'JPEGImages', cat, data['trg_imname']))
+                # Draw source bounding box and keypoints
+                src_vis = src_img.copy()
+                src_bbox = data['src_bndbox']
+                cv2.rectangle(src_vis, (src_bbox[0], src_bbox[1]), (src_bbox[2], src_bbox[3]), (0,0,255), 2)
+                # Add bbox coordinates
+                cv2.putText(src_vis, f'({src_bbox[0]},{src_bbox[1]})', (src_bbox[0], src_bbox[1]-5), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
+                cv2.putText(src_vis, f'({src_bbox[2]},{src_bbox[3]})', (src_bbox[2], src_bbox[3]+15),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
+                # Add keypoint coordinates
+                for kp in data['src_kps']:
+                    cv2.circle(src_vis, (int(kp[0]), int(kp[1])), 3, (255,0,0), -1)
+                    cv2.putText(src_vis, f'({int(kp[0])},{int(kp[1])})', (int(kp[0])+5, int(kp[1])-5),
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 2)
+                # cv2.imwrite(f'vis_src_{data["src_imname"]}', src_vis)
+                
+                # Draw target bounding box and keypoints
+                trg_vis = trg_img.copy()
+                trg_bbox = data['trg_bndbox']
+                cv2.rectangle(trg_vis, (trg_bbox[0], trg_bbox[1]), (trg_bbox[2], trg_bbox[3]), (0,0,255), 2)
+                # Add bbox coordinates          
+                cv2.putText(trg_vis, f'({trg_bbox[0]},{trg_bbox[1]})', (trg_bbox[0], trg_bbox[1]-5),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
+                cv2.putText(trg_vis, f'({trg_bbox[2]},{trg_bbox[3]})', (trg_bbox[2], trg_bbox[3]+15),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
+                # Add keypoint coordinates
+                for kp in data['trg_kps']:
+                    cv2.circle(trg_vis, (int(kp[0]), int(kp[1])), 3, (255,0,0), -1)
+                    cv2.putText(trg_vis, f'({int(kp[0])},{int(kp[1])})', (int(kp[0])+5, int(kp[1])-5),
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 2)
+                # cv2.imwrite(f'vis_trg_{data["trg_imname"]}', trg_vis)
+            
+                
+            print(f"src_file: {data['src_imname']}, src_img_size: {data['src_imsize']}")
+            print(f"trg_file: {data['trg_imname']}, trg_img_size: {data['trg_imsize']}")
             src_img_size = data['src_imsize'][:2][::-1]
             trg_img_size = data['trg_imsize'][:2][::-1]
 
             src_ft = output_dict[data['src_imname']]
             trg_ft = output_dict[data['trg_imname']]
-
+            
             src_ft = nn.Upsample(size=src_img_size, mode='bilinear')(src_ft)
             trg_ft = nn.Upsample(size=trg_img_size, mode='bilinear')(trg_ft)
             h = trg_ft.shape[-2]
@@ -102,7 +152,12 @@ def main(args):
             total = 0
             correct = 0
 
-            for idx in range(len(data['src_kps'])):
+            # Create a combined visualization image
+            if VISUALIZE:
+                combined_vis = np.hstack((src_vis, trg_vis))
+
+            # for each src_kps find the best match in trg_features
+            for idx in range(len(data['src_kps'])): 
                 total += 1
                 cat_total += 1
                 all_total += 1
@@ -112,17 +167,36 @@ def main(args):
                 num_channel = src_ft.size(1)
                 src_vec = src_ft[0, :, src_point[1], src_point[0]].view(1, num_channel) # 1, C
                 trg_vec = trg_ft.view(num_channel, -1).transpose(0, 1) # HW, C
-                src_vec = F.normalize(src_vec).transpose(0, 1) # c, 1
+                # Apply l2 normalization -> t1=[1,2,3] -> l2norm_t1 = t1/(t1**2).sum()**0.5
+                src_vec = F.normalize(src_vec).transpose(0, 1) # c, 1   
                 trg_vec = F.normalize(trg_vec) # HW, c
                 cos_map = torch.mm(trg_vec, src_vec).view(h, w).cpu().numpy() # H, W
 
                 max_yx = np.unravel_index(cos_map.argmax(), cos_map.shape)
+                # cos_map[max_yx] 하면 최대값 구해진다! 
 
                 dist = ((max_yx[1] - trg_point[0]) ** 2 + (max_yx[0] - trg_point[1]) ** 2) ** 0.5
-                if (dist / threshold) <= 0.1:
+                is_correct = (dist / threshold) <= 0.1
+                if is_correct:
                     correct += 1
                     cat_correct += 1
                     all_correct += 1
+
+                # Draw matches on combined visualization
+                if VISUALIZE:
+                    # Source point coordinates
+                    src_x, src_y = int(src_point[0]), int(src_point[1])
+                    # Target point coordinates (add source image width for combined image)
+                    trg_x = int(max_yx[1]) + src_img.shape[1]  # Add source width offset
+                    trg_y = int(max_yx[0])
+                    # Draw line between matched points - green for correct, red for incorrect
+                    color = (0,255,0) if is_correct else (0,0,255)
+                    cv2.line(combined_vis, (src_x, src_y), (trg_x, trg_y), color, 2)  
+                    
+            if VISUALIZE:
+                cv2.imwrite(f'{SAVE_PATH}/src{data["src_imname"]}_trg{data["trg_imname"]}.jpg', combined_vis)
+                    
+            breakpoint()
 
             cat_pck.append(correct / total)
         total_pck.extend(cat_pck)
@@ -131,6 +205,8 @@ def main(args):
         print(f'{cat} per point PCK@0.1: {cat_correct / cat_total * 100:.2f}')
     print(f'All per image PCK@0.1: {np.mean(total_pck) * 100:.2f}')
     print(f'All per point PCK@0.1: {all_correct / all_total * 100:.2f}')
+    
+    breakpoint()
 
 
 if __name__ == "__main__":

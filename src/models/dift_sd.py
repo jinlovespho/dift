@@ -10,6 +10,7 @@ import gc
 import os
 from PIL import Image
 from torchvision.transforms import PILToTensor
+from torchvision.utils import save_image 
 
 class MyUNet2DConditionModel(UNet2DConditionModel):
     def forward(
@@ -36,28 +37,29 @@ class MyUNet2DConditionModel(UNet2DConditionModel):
         # The overall upsampling factor is equal to 2 ** (# num of upsampling layears).
         # However, the upsampling interpolation output size can be forced to fit any upsampling size
         # on the fly if necessary.
+
         default_overall_up_factor = 2**self.num_upsamplers
 
         # upsample size should be forwarded when sample is not a multiple of `default_overall_up_factor`
         forward_upsample_size = False
         upsample_size = None
 
-        if any(s % default_overall_up_factor != 0 for s in sample.shape[-2:]):
+        if any(s % default_overall_up_factor != 0 for s in sample.shape[-2:]):  # f
             # logger.info("Forward upsample size to force interpolation output size.")
             forward_upsample_size = True
 
         # prepare attention_mask
-        if attention_mask is not None:
+        if attention_mask is not None:  # f
             attention_mask = (1 - attention_mask.to(sample.dtype)) * -10000.0
             attention_mask = attention_mask.unsqueeze(1)
 
         # 0. center input if necessary
-        if self.config.center_input_sample:
+        if self.config.center_input_sample: # f
             sample = 2 * sample - 1.0
 
         # 1. time
         timesteps = timestep
-        if not torch.is_tensor(timesteps):
+        if not torch.is_tensor(timesteps):  # f
             # TODO: this requires sync between CPU and GPU. So try to pass timesteps as tensors if you can
             # This would be a good case for the `match` statement (Python 3.10+)
             is_mps = sample.device.type == "mps"
@@ -66,22 +68,22 @@ class MyUNet2DConditionModel(UNet2DConditionModel):
             else:
                 dtype = torch.int32 if is_mps else torch.int64
             timesteps = torch.tensor([timesteps], dtype=dtype, device=sample.device)
-        elif len(timesteps.shape) == 0:
+        elif len(timesteps.shape) == 0: # t
             timesteps = timesteps[None].to(sample.device)
 
         # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
         timesteps = timesteps.expand(sample.shape[0])
 
-        t_emb = self.time_proj(timesteps)
+        t_emb = self.time_proj(timesteps)   # from (ensem,1) -> proj -> (ensem, 320)
 
         # timesteps does not contain any weights and will always return f32 tensors
         # but time_embedding might actually be running in fp16. so we need to cast here.
         # there might be better ways to encapsulate this.
         t_emb = t_emb.to(dtype=self.dtype)
 
-        emb = self.time_embedding(t_emb, timestep_cond)
+        emb = self.time_embedding(t_emb, timestep_cond) # from (ensem, 320) -> (ensem, 1280)
 
-        if self.class_embedding is not None:
+        if self.class_embedding is not None:    # f
             if class_labels is None:
                 raise ValueError("class_labels should be provided when num_class_embeds > 0")
 
@@ -92,7 +94,7 @@ class MyUNet2DConditionModel(UNet2DConditionModel):
             emb = emb + class_emb
 
         # 2. pre-process
-        sample = self.conv_in(sample)
+        sample = self.conv_in(sample)   # from (b, 4, 96, 96) -> (b, 320, 96, 96)
 
         # 3. down
         down_block_res_samples = (sample,)
@@ -120,6 +122,7 @@ class MyUNet2DConditionModel(UNet2DConditionModel):
                 cross_attention_kwargs=cross_attention_kwargs,
             )
 
+        # I GUESS THIS IS WHERE DIFT FEATURE EXTRACTION TAKES PLACE
         # 5. up
         up_ft = {}
         for i, upsample_block in enumerate(self.up_blocks):
@@ -137,7 +140,8 @@ class MyUNet2DConditionModel(UNet2DConditionModel):
             if not is_final_block and forward_upsample_size:
                 upsample_size = down_block_res_samples[-1].shape[2:]
 
-            if hasattr(upsample_block, "has_cross_attention") and upsample_block.has_cross_attention:
+            # if up block is cross-attention block, must condition prompt
+            if hasattr(upsample_block, "has_cross_attention") and upsample_block.has_cross_attention:   
                 sample = upsample_block(
                     hidden_states=sample,
                     temb=emb,
@@ -147,7 +151,7 @@ class MyUNet2DConditionModel(UNet2DConditionModel):
                     upsample_size=upsample_size,
                     attention_mask=attention_mask,
                 )
-            else:
+            else:   
                 sample = upsample_block(
                     hidden_states=sample, temb=emb, res_hidden_states_tuple=res_samples, upsample_size=upsample_size
                 )
@@ -174,11 +178,13 @@ class OneStepSDPipeline(StableDiffusionPipeline):
         cross_attention_kwargs: Optional[Dict[str, Any]] = None
     ):
 
+        # img_tensor: ensem, 3 768 768
+        # breakpoint()
         device = self._execution_device
-        latents = self.vae.encode(img_tensor).latent_dist.sample() * self.vae.config.scaling_factor
-        t = torch.tensor(t, dtype=torch.long, device=device)
-        noise = torch.randn_like(latents).to(device)
-        latents_noisy = self.scheduler.add_noise(latents, noise, t)
+        latents = self.vae.encode(img_tensor).latent_dist.sample() * self.vae.config.scaling_factor     # ensem 4 96 96 
+        t = torch.tensor(t, dtype=torch.long, device=device)    
+        noise = torch.randn_like(latents).to(device)    # ensem 4 96 96 
+        latents_noisy = self.scheduler.add_noise(latents, noise, t) # add noise to img depending on current time (ensem, 4, 96 96)
         unet_output = self.unet(latents_noisy,
                                t,
                                up_ft_indices,
@@ -224,6 +230,7 @@ class SDFeaturizer:
         Return:
             unet_ft: a torch tensor in the shape of [1, c, h, w]
         '''
+        breakpoint()
         img_tensor = img_tensor.repeat(ensemble_size, 1, 1, 1).cuda() # ensem, c, h, w
         if prompt == self.null_prompt:
             prompt_embeds = self.null_prompt_embeds
@@ -273,20 +280,22 @@ class SDFeaturizer4Eval(SDFeaturizer):
                 t=261,
                 up_ft_index=1,
                 ensemble_size=8):
+
+        # breakpoint()
         if img_size is not None:
-            img = img.resize(img_size)
-        img_tensor = (PILToTensor()(img) / 255.0 - 0.5) * 2
-        img_tensor = img_tensor.unsqueeze(0).repeat(ensemble_size, 1, 1, 1).cuda() # ensem, c, h, w
-        if category in self.cat2prompt_embeds:
+            img = img.resize(img_size)  # resize to 768 768 
+        img_tensor = (PILToTensor()(img) / 255.0 - 0.5) * 2     # scale from [0,225] to [-1,1], shape: (3,768,768)
+        img_tensor = img_tensor.unsqueeze(0).repeat(ensemble_size, 1, 1, 1).cuda() # ensem, c, h, w (8 3 768 768)
+        if category in self.cat2prompt_embeds:  # 1 77 1024
             prompt_embeds = self.cat2prompt_embeds[category]
         else:
             prompt_embeds = self.null_prompt_embeds
-        prompt_embeds = prompt_embeds.repeat(ensemble_size, 1, 1).cuda()
+        prompt_embeds = prompt_embeds.repeat(ensemble_size, 1, 1).cuda() # ensem, max_seq_len dim 8 77 1024 
         unet_ft_all = self.pipe(
             img_tensor=img_tensor,
             t=t,
             up_ft_indices=[up_ft_index],
             prompt_embeds=prompt_embeds)
         unet_ft = unet_ft_all['up_ft'][up_ft_index] # ensem, c, h, w
-        unet_ft = unet_ft.mean(0, keepdim=True) # 1,c,h,w
+        unet_ft = unet_ft.mean(0, keepdim=True) # average along batch(ensem) dimension => 1,c,h,w 
         return unet_ft

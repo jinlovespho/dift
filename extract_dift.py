@@ -3,6 +3,7 @@ import torch
 from PIL import Image
 from torchvision.transforms import PILToTensor
 from src.models.dift_sd import SDFeaturizer
+from torchvision.utils import save_image
 
 def main(args):
     dift = SDFeaturizer(args.model_id)
@@ -17,6 +18,8 @@ def main(args):
                       ensemble_size=args.ensemble_size)
     ft = torch.save(ft.squeeze(0).cpu(), args.output_path) # save feature in the shape of [c, h, w]
 
+    save_image(img_tensor, './img.jpg', normalize=True)
+    breakpoint()
 
 if __name__ == '__main__':
 
