@@ -167,26 +167,12 @@ davis_results_adm/
 superpoint-1k/
 hpatches_results/
 superpoint-1k.zip
-SPair-71k.tar.gz
 SPair-71k/
 ./guided-diffusion/models/256x256_diffusion_uncond.pt
 
-
 # PHO
-data/
 *.jpg
 *.pth
-!vis/vis_match/GT/aeroplane/GT_src2008_002719_trg2008_004100.jpg
-!vis/vis_match/GT/bicycle/GT_src2008_002515_trg2008_003395.jpg
-!vis/vis_match/GT/bird/GT_src2007_004143_trg2008_000512.jpg
-!vis/vis_match/GT/boat/GT_src2008_003313_trg2008_003480.jpg
-!vis/vis_match/GT/bottle/GT_src2008_004607_trg2008_006558.jpg
-!vis/vis_match/dift/aeroplane/pred_src2008_002719_trg2008_004100.jpg
-!vis/vis_match/dift/bicycle/pred_src2008_002515_trg2008_003395.jpg
-!vis/vis_match/dift/bird/pred_src2007_004143_trg2008_000512.jpg
-!vis/vis_match/dift/boat/pred_src2008_003313_trg2008_003480.jpg
-!vis/vis_match/dift/bottle/pred_src2008_004607_trg2008_006558.jpg
-
 
 
 
