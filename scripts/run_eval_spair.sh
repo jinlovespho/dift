@@ -1,12 +1,12 @@
 CUDA_VISIBLE_DEVICES=3 python eval_spair.py \
                                     --dataset_path ./data/SPair-71k \
-                                    --save_path ./feats/spair_ft \
+                                    --save_path ./extracted_feats/spair_dift \
                                     --dift_model sd \
                                     --img_size 768 768 \
                                     --t 261 \
                                     --up_ft_index 1 \
                                     --ensemble_size 8 \
-                                    --save_vis_pred_kpts_dir './vis/vis_match/dift' \
+                                    --save_vis_pred_kpts_dir './vis/spair/dift' \
                                     --vis_pred_kpts \
 
 
