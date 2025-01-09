@@ -24,6 +24,7 @@ def main(args):
     test_path = 'PairAnnotation/test'
     json_list = os.listdir(os.path.join(dataset_path, test_path))
     all_cats = os.listdir(os.path.join(dataset_path, 'JPEGImages'))
+    all_cats.sort()
     cat2json = {}
 
     for cat in all_cats:
@@ -49,25 +50,26 @@ def main(args):
             if trg_imname not in cat2img[cat]:
                 cat2img[cat].append(trg_imname)
 
+    breakpoint()
     if args.dift_model == 'sd':
         dift = SDFeaturizer4Eval(cat_list=all_cats)
     elif args.dift_model == 'adm':
         dift = ADMFeaturizer4Eval()
 
-    print("saving all test images' features...")
-    os.makedirs(args.save_path, exist_ok=True)
-    for cat in tqdm(all_cats):
-        output_dict = {}
-        image_list = cat2img[cat]
-        for image_path in image_list:
-            img = Image.open(os.path.join(dataset_path, 'JPEGImages', cat, image_path))
-            output_dict[image_path] = dift.forward(img,
-                                                category=cat,
-                                                img_size=args.img_size,
-                                                t=args.t,
-                                                up_ft_index=args.up_ft_index,
-                                                ensemble_size=args.ensemble_size)
-        torch.save(output_dict, os.path.join(args.save_path, f'{cat}.pth'))
+    # print("saving all test images' features...")
+    # os.makedirs(args.save_path, exist_ok=True)
+    # for cat in tqdm(all_cats):
+    #     output_dict = {}
+    #     image_list = cat2img[cat]
+    #     for image_path in image_list:
+    #         img = Image.open(os.path.join(dataset_path, 'JPEGImages', cat, image_path))
+    #         output_dict[image_path] = dift.forward(img,
+    #                                             category=cat,
+    #                                             img_size=args.img_size,
+    #                                             t=args.t,
+    #                                             up_ft_index=args.up_ft_index,
+    #                                             ensemble_size=args.ensemble_size)
+    #     torch.save(output_dict, os.path.join(args.save_path, f'{cat}.pth'))
 
     total_pck = []
     all_correct = 0
@@ -77,6 +79,7 @@ def main(args):
         cat_list = cat2json[cat]
         output_dict = torch.load(os.path.join(args.save_path, f'{cat}.pth'))
 
+        breakpoint()
         cat_pck = []
         cat_correct = 0
         cat_total = 0
