@@ -50,27 +50,34 @@ def main(args):
             if trg_imname not in cat2img[cat]:
                 cat2img[cat].append(trg_imname)
 
-    breakpoint()
+
+    for key, value in cat2img.items():
+        count=len(cat2img[key])
+        print(f'{key}: {count}')
+        
     if args.dift_model == 'sd':
         dift = SDFeaturizer4Eval(cat_list=all_cats)
     elif args.dift_model == 'adm':
         dift = ADMFeaturizer4Eval()
 
-    # print("saving all test images' features...")
-    # os.makedirs(args.save_path, exist_ok=True)
-    # for cat in tqdm(all_cats):
-    #     output_dict = {}
-    #     image_list = cat2img[cat]
-    #     for image_path in image_list:
-    #         img = Image.open(os.path.join(dataset_path, 'JPEGImages', cat, image_path))
-    #         output_dict[image_path] = dift.forward(img,
-    #                                             category=cat,
-    #                                             img_size=args.img_size,
-    #                                             t=args.t,
-    #                                             up_ft_index=args.up_ft_index,
-    #                                             ensemble_size=args.ensemble_size)
-    #     torch.save(output_dict, os.path.join(args.save_path, f'{cat}.pth'))
-
+    if args.is_feat_extracted == False:
+        print("saving all test images' features...")
+        os.makedirs(args.save_path, exist_ok=True)
+        for cat in tqdm(all_cats):
+            output_dict = {}
+            image_list = cat2img[cat]
+            for image_path in image_list:
+                img = Image.open(os.path.join(dataset_path, 'JPEGImages', cat, image_path))
+                output_dict[image_path] = dift.forward(img,
+                                                    category=cat,
+                                                    img_size=args.img_size,
+                                                    t=args.t,
+                                                    up_ft_index=args.up_ft_index,
+                                                    ensemble_size=args.ensemble_size)
+            torch.save(output_dict, os.path.join(args.save_path, f'{cat}.pth'))
+    else:
+        print('DIFT features already extracted')
+        
     total_pck = []
     all_correct = 0
     all_total = 0
@@ -79,7 +86,6 @@ def main(args):
         cat_list = cat2json[cat]
         output_dict = torch.load(os.path.join(args.save_path, f'{cat}.pth'))
 
-        breakpoint()
         cat_pck = []
         cat_correct = 0
         cat_total = 0
@@ -198,5 +204,7 @@ if __name__ == "__main__":
     
     parser.add_argument('--vis_pred_kpts', action='store_true')
     parser.add_argument('--save_vis_pred_kpts_dir', type=str)
+    parser.add_argument('--is_feat_extracted', type=bool, default=False)
+    
     args = parser.parse_args()
     main(args)
